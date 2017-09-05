@@ -81,35 +81,40 @@ info.el <- subset(ed, select = c(Source, Target, InformationInteger))
 comm.el <- subset(ed, select = c(Source, Target, CommunicationInteger))
 
 
+# select relationship to work with ----------------------------------------
+
+relationship <- "info" # or "comm"
+
+graph.el <- info.el # MODIFY THIS LINE DEPENDING ON RELATIONSHIP
+
+###########MODIFY ALSO LINE 117 FOR SAVING THE ROBJECT
+
 # creating networks using igraph ------------------------------------------
 
 
 library(igraph)
-names(info.el)[3]<-"weight"
-info.g <- graph.data.frame(info.el, directed=T, vertices = nodes[,c(1,3:10)])
-info.g
+names(graph.el)[3]<-"weight"
+graph.g <- graph.data.frame(graph.el, directed=T, vertices = nodes[,c(1,3:10)])
+graph.g
 
 # dichotomize data
-info.str <- which (E(info.g)$weight > 3)
-info.wk <- which (E(info.g)$weight < 4)
-info.g <- info.g %>% 
-  set_edge_attr("weight", info.str, 1)
-info.g <- info.g %>% set_edge_attr("weight", info.wk, 0)
+E(graph.g)$bin <- E(graph.g)$weight
+graph.g <- graph.g %>% set_edge_attr("bin", which(E(graph.g)$weight > 3), 1)
+graph.g <- graph.g %>% set_edge_attr("bin", which (E(graph.g)$weight < 4), 0)
 
-# delete edges with weight = 0
-info.g
-info.g <- info.g %>% delete_edges(info.wk)
-info.g
 
 
 # subset networks by branch -----------------------------------------------
 
-graph.g <- comm.g # modify this line
+# delete weak ties
+graph.str <- graph.g %>% delete_edges(which(E(graph.g)$weight < 4))
+
 graph.exec <- induced_subgraph(graph.g, which(V(graph.g)$Branch.Area == "Executive Area") )
 graph.strat <- induced_subgraph(graph.g, which(V(graph.g)$Branch.Area == "Strategic Systems Branch") )
 graph.op <- induced_subgraph(graph.g, which(V(graph.g)$Branch.Area == "Operational Comms") )
 graph.infra <- induced_subgraph(graph.g, which(V(graph.g)$Branch.Area == "Infrastructure Support") )
 graph.engin <- induced_subgraph(graph.g, which(V(graph.g)$Branch.Area == "Engineering") )
+
 # save graph objects for plotting -----------------------------------------
 save.image("comm_graphs.RData") #change line according to name of network shown in line 36
 
@@ -140,43 +145,37 @@ write.table(graph_desc, "graph_descriptives.csv", append = T)
 
 # create networks using statnet
 
-#info.el[which(info.el$InformationInteger < 4),3] <- 0
-#info.el[which(info.el$InformationInteger > 3),3] <- 1
+# density tables ----------------------------------------------------------
 
-# nodes[,4:10] <- apply(nodes[,4:10], 2,function(x) as.character(x))
-# info.n <- network(info, 
-#                   #vertex.attr = c(nodes$Age.Levels, nodes$Job.Level, nodes$Tenure, as.character(nodes$Branch.Area), nodes$Embedded, nodes$Gender, nodes$Position),
-#                   #vertex.attrnames = list("age", "job", "tenure", "branch", "embedded", "gender", "position"),
-#                   directed = T, 
-#                   matrix.type="edgelist"
-#           )
-# 
-# # add vertex attributes
-# info.n %v% "age" <- nodes$Age.Levels
-# info.n %v% "job" <- nodes$Job.Level
-# info.n %v% "tenure" <- nodes$Tenure
-# info.n %v% "branch" <- nodes$Branch.Area
-# info.n %v% "embedded" <- nodes$Embedded
-# info.n %v% "gender" <- nodes$Gender
-# info.n %v% "position" <- nodes$Position
-# 
-# # subset by department
-# branch <- info.n %v% "branch"
-# unique_branch <- unique(branch)
-# 
-# 
-# info.n_exec <- info.n %s% which(branch == "Executive Area")
-# info.n_strat <- info.n %s% which(info.n %v% "branch" == "Strategic Systems Branch")
-# info.n_opcom <- info.n %s% which(info.n %v% "branch" == "Operational Comms")
-# info.n_infa <- info.n %s% which(info.n %v% "branch" == "Infrastructure Support")
-# info.n_engin <- info.n %s% which(info.n %v% "branch" == "Engineering")
-# 
-# # sna overview of each department
-# 
-# msloc_sna_metric <- function(network){
-#   library(sna)
-#   ind <- degree(network, gmode = "digraph", cmode= "indegree", rescale = T )
-#   outd <- degree(network, gmode = "digraph", cmode= "outdegree" , rescale = T)
-#   btw <- betweenness(network, gmode="digraph", cmode = "directed", rescale = T)
-#     strholes
-# }
+library(rDNA)
+# info.el[which(info.el$weight < 4),3] <- 0
+# info.el[which(info.el$weight > 3),3] <- 1
+# info.ed <- info.el[which(info.el$weight == 1),]
+
+# turn into a matrix
+library(igraph)  
+library(reshape2)
+library(ggplot2)
+
+graphstr.m <- get.adjacency(graph.str , names=T, attr="bin")
+graph.m <- get.adjacency(graph.g , names=T, attr="weight")
+groups <- matrix(nodes[,7])
+row.names(groups) <- nodes[,1]
+
+dep_density_table <- dna.density(graphstr.m, partitions = groups, weighted=F)
+dep_density_table_value <- dna.density(graph.m, partitions = groups, weighted=T)
+dep_dens_melt <- melt(dep_density_table)
+
+dep_dens_melt <- melt(dep_density_table)
+
+
+ggplot(dep_dens_melt, aes(Var1, Var2)) + 
+  geom_tile(aes(fill=value), color = "white") + 
+  #geom_text(aes(y=1:5, x=1:5, label=dep_dens_melt$value))
+  scale_fill_gradient2(low="#e5f5f9", mid = "#99d8c9", high="#2ca25f", 
+                       space = "Lab", midpoint = mean(dep_dens_melt$value)-0.05, guide="colorbar")+
+  labs(title=paste("Proportion of ", relationship,"within and between Departments"),
+       x ="Department of Sender", y = "Department of Receiver") +
+  theme(axis.text.x = element_text(angle=45, hjust=+1)
+        )
+ggsave(paste("density_table_bin_", relationship,".png"))
