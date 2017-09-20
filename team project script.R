@@ -66,11 +66,10 @@ msloc_snametric <- function(gs) {
 
 # Load Data ---------------------------------------------------------------
 
-
-
 info <- read.csv("army-MaturingWorkforce [Nodes]_communication_august2017.csv", header = T)
 ed <- read.csv("Army-MaturingWorkforce [Edges].csv", header=T)
 nodes <- read.csv("Army-MaturingWorkforce [Nodes].csv", header = T)
+nodes[which(nodes[,10]) == " "] <- "missing Position"
 
 
 
@@ -83,7 +82,7 @@ comm.el <- subset(ed, select = c(Source, Target, CommunicationInteger))
 
 # select relationship to work with ----------------------------------------
 
-relationship <- "info" # or "comm"
+relationship <- "Information Exchange" # or "comm"
 
 graph.el <- info.el # MODIFY THIS LINE DEPENDING ON RELATIONSHIP
 
@@ -157,9 +156,61 @@ library(igraph)
 library(reshape2)
 library(ggplot2)
 
+density_tables <-function(graphobject, col_index_for_groups, relationship, group){
+  graph <- get.adjacency(graphobject , names=T, attr="bin")
+  groups <- matrix(nodes[,col_index_for_groups]) 
+  row.names(groups) <- nodes[,1]
+  
+  #calculate binary density table
+  density_table <- dna.density(graph, partitions = groups, weighted=F)
+  
+  #prep for drawing
+  dens_melt <- melt(density_table)
+  
+  #draw and return
+  p<- ggplot(dens_melt, aes(Var1, Var2)) + 
+    geom_tile(aes(fill=value), color = "white") + 
+    #geom_text(aes(y=1:5, x=1:5, label=dep_dens_melt$value))
+    scale_fill_gradient2(low="#e5f5f9", mid = "#99d8c9", high="#2ca25f", 
+                         space = "Lab", midpoint = mean(dep_dens_melt$value)-0.05, guide="colorbar")+
+    labs(title=paste("Proportion of ", relationship,"within and between Groups (",group,")"),
+         x ="Group of Sender", y = "Group of Receiver") +
+    theme(axis.text.x = element_text(angle=45, hjust=+1)
+    )
+  return(p)
+  
+}
+colnames(nodes)
+density_tables(graph.g, 4, relationship, group="Age")
+group="Age"
+ggsave(paste("density_table_bin_", relationship,"_", group,".png"))
+
+density_tables(graph.g, 5, relationship, group="Job")
+group="Job"
+ggsave(paste("density_table_bin_", relationship,"_", group,".png"))
+
+density_tables(graph.g, 6, relationship, group="Tenure")
+group="Tenure"
+ggsave(paste("density_table_bin_", relationship,"_", group,".png"))
+
+density_tables(graph.g, 8, relationship, group="Embedded")
+group="Embedded"
+ggsave(paste("density_table_bin_", relationship,"_", group,".png"))
+
+density_tables(graph.g, 9, relationship, group="Gender")
+group="Gender"
+ggsave(paste("density_table_bin_", relationship,"_", group,".png"))
+
+density_tables(graph.g, 10, relationship, group="Position")
+group="Position"
+ggsave(paste("density_table_bin_", relationship,"_", group,".png"))
+
+
+
+#original script for calculating density table. keep for reference
 graphstr.m <- get.adjacency(graph.str , names=T, attr="bin")
 graph.m <- get.adjacency(graph.g , names=T, attr="weight")
-groups <- matrix(nodes[,7])
+groups <- matrix(nodes[,7]) # groups = departments
 row.names(groups) <- nodes[,1]
 
 dep_density_table <- dna.density(graphstr.m, partitions = groups, weighted=F)
@@ -167,7 +218,6 @@ dep_density_table_value <- dna.density(graph.m, partitions = groups, weighted=T)
 dep_dens_melt <- melt(dep_density_table)
 
 dep_dens_melt <- melt(dep_density_table)
-
 
 ggplot(dep_dens_melt, aes(Var1, Var2)) + 
   geom_tile(aes(fill=value), color = "white") + 
